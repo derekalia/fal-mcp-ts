@@ -32,14 +32,28 @@ export async function falRequest<T>(
     throw new Error("FAL_KEY environment variable is not set");
   }
 
-  const headers = {
+  const method = (options.method || "GET").toUpperCase();
+  const headers: Record<string, string> = {
     "Authorization": `Key ${apiKey}`,
-    "Content-Type": "application/json",
-    ...options.headers,
   };
+
+  // Copy existing headers if any
+  if (options.headers) {
+    Object.entries(options.headers).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        headers[key] = value;
+      }
+    });
+  }
+
+  // Only set Content-Type for methods that can have a body
+  if (method === "POST" || method === "PUT" || method === "PATCH") {
+    headers["Content-Type"] = "application/json";
+  }
 
   const response = await fetch(url, {
     ...options,
+    method,
     headers,
   });
 
