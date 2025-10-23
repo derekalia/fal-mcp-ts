@@ -15,35 +15,45 @@ export interface GenerateOptions {
 
 export interface GenerateResult {
   request_id: string;
-  status: "pending" | "processing" | "completed" | "failed";
-  result?: any;
-  eta?: number;
-  output_url?: string;
+  status: "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED";
+  response_url: string;
+  status_url: string;
+  cancel_url: string;
+  queue_position?: number;
 }
 
 export interface QueueResult {
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED";
+  request_id: string;
+  response_url: string;
+  status_url: string;
+  cancel_url: string;
   result?: any;
   error?: string;
-  eta?: number;
+  logs?: any[];
+  metrics?: any;
 }
 
 export interface QueueStatus {
-  status: "pending" | "processing" | "completed" | "failed";
-  eta?: number;
-  progress?: number;
+  status: "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED";
+  request_id: string;
+  response_url: string;
+  status_url: string;
+  cancel_url: string;
+  queue_position?: number;
+  logs?: any[];
 }
 
 export interface CancelResult {
-  success: boolean;
-  message: string;
+  status: string;
+  [key: string]: any;
 }
 
 /**
  * Submit a generation request to a fal.ai model
  */
 export async function generate(options: GenerateOptions): Promise<GenerateResult> {
-  const { app_id, input_data, webhook_url, output_format = "json" } = options;
+  const { app_id, input_data, webhook_url } = options;
 
   // Use queue endpoint for async processing
   const url = `${FAL_QUEUE_URL}/${app_id}`;
@@ -56,64 +66,38 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
     payload.webhook_url = webhook_url;
   }
 
-  if (output_format !== "json") {
-    payload.output_format = output_format;
-  }
-
-  const response = await falRequest<any>(url, {
+  const response = await falRequest<GenerateResult>(url, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
-  // Normalize response format
-  if ("request_id" in response) {
-    return {
-      request_id: response.request_id,
-      status: response.status || "pending",
-      eta: response.eta,
-      output_url: response.output_url,
-    };
-  } else {
-    // Some models return results immediately
-    return {
-      request_id: response.id || "immediate",
-      status: "completed",
-      result: response,
-    };
-  }
+  // Return the full queue response with URLs
+  return response;
 }
 
 /**
- * Get the result of a generation request
+ * Get the result of a generation request using the response_url from the queue
  */
-export async function getResult(app_id: string, request_id: string): Promise<QueueResult> {
-  const url = `${FAL_QUEUE_URL}/${app_id}/requests/${request_id}`;
+export async function getResult(url: string): Promise<QueueResult> {
   return falRequest<QueueResult>(url, {
     method: "GET",
   });
 }
 
 /**
- * Check the status of a generation request without fetching full results
+ * Check the status of a generation request using the status_url from the queue
  */
-export async function getStatus(app_id: string, request_id: string): Promise<QueueStatus> {
-  const url = `${FAL_QUEUE_URL}/${app_id}/requests/${request_id}/status`;
+export async function getStatus(url: string): Promise<QueueStatus> {
   return falRequest<QueueStatus>(url, {
     method: "GET",
   });
 }
 
 /**
- * Cancel a pending or processing generation request
+ * Cancel a pending or processing generation request using the cancel_url from the queue
  */
-export async function cancelRequest(app_id: string, request_id: string): Promise<CancelResult> {
-  const url = `${FAL_QUEUE_URL}/${app_id}/requests/${request_id}/cancel`;
-  const response = await falRequest<any>(url, {
-    method: "POST",
+export async function cancelRequest(url: string): Promise<CancelResult> {
+  return falRequest<CancelResult>(url, {
+    method: "PUT",
   });
-
-  return {
-    success: true,
-    message: response.message || "Request cancelled successfully",
-  };
 }

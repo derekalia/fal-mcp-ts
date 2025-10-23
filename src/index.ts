@@ -117,56 +117,44 @@ const TOOLS: Tool[] = [
   },
   {
     name: "result",
-    description: "Get the result of a generation request. Use this to retrieve the output once generation is complete.",
+    description: "Get the result of a generation request. Use the response_url from the generate() response.",
     inputSchema: {
       type: "object",
       properties: {
-        app_id: {
+        url: {
           type: "string",
-          description: "The model application ID used for generation",
-        },
-        request_id: {
-          type: "string",
-          description: "The request ID returned from generate()",
+          description: "The response_url returned from generate()",
         },
       },
-      required: ["app_id", "request_id"],
+      required: ["url"],
     },
   },
   {
     name: "status",
-    description: "Check the status of a generation request without fetching full results. Useful for polling progress.",
+    description: "Check the status of a generation request without fetching full results. Use the status_url from the generate() response.",
     inputSchema: {
       type: "object",
       properties: {
-        app_id: {
+        url: {
           type: "string",
-          description: "The model application ID",
-        },
-        request_id: {
-          type: "string",
-          description: "The request ID to check",
+          description: "The status_url returned from generate()",
         },
       },
-      required: ["app_id", "request_id"],
+      required: ["url"],
     },
   },
   {
     name: "cancel",
-    description: "Cancel a pending or processing generation request.",
+    description: "Cancel a pending or processing generation request. Use the cancel_url from the generate() response.",
     inputSchema: {
       type: "object",
       properties: {
-        app_id: {
+        url: {
           type: "string",
-          description: "The model application ID",
-        },
-        request_id: {
-          type: "string",
-          description: "The request ID to cancel",
+          description: "The cancel_url returned from generate()",
         },
       },
-      required: ["app_id", "request_id"],
+      required: ["url"],
     },
   },
   {
@@ -307,13 +295,10 @@ async function main() {
         }
 
         case "result": {
-          if (!args.app_id || !args.request_id) {
-            throw new Error("app_id and request_id parameters are required");
+          if (!args.url) {
+            throw new Error("url parameter is required");
           }
-          const result = await getResult(
-            args.app_id as string,
-            args.request_id as string
-          );
+          const result = await getResult(args.url as string);
           return {
             content: [
               {
@@ -325,13 +310,10 @@ async function main() {
         }
 
         case "status": {
-          if (!args.app_id || !args.request_id) {
-            throw new Error("app_id and request_id parameters are required");
+          if (!args.url) {
+            throw new Error("url parameter is required");
           }
-          const result = await getStatus(
-            args.app_id as string,
-            args.request_id as string
-          );
+          const result = await getStatus(args.url as string);
           return {
             content: [
               {
@@ -343,13 +325,10 @@ async function main() {
         }
 
         case "cancel": {
-          if (!args.app_id || !args.request_id) {
-            throw new Error("app_id and request_id parameters are required");
+          if (!args.url) {
+            throw new Error("url parameter is required");
           }
-          const result = await cancelRequest(
-            args.app_id as string,
-            args.request_id as string
-          );
+          const result = await cancelRequest(args.url as string);
           return {
             content: [
               {
