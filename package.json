@@ -1,5 +1,5 @@
 {
-  "name": "@fal-ai/mcp-server",
+  "name": "@derekalia/fal-mcp-server",
   "version": "1.0.0",
   "description": "Model Context Protocol (MCP) server for fal.ai - interact with AI models through Claude and other MCP clients",
   "main": "dist/index.js",
