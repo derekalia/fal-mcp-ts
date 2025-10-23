@@ -1,0 +1,43 @@
+{
+  "name": "@fal-ai/mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol (MCP) server for fal.ai - interact with AI models through Claude and other MCP clients",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "fal-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "watch": "tsc --watch",
+    "prepare": "npm run build",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "fal",
+    "fal.ai",
+    "ai",
+    "image-generation",
+    "llm",
+    "claude"
+  ],
+  "author": "Derek Alia",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/derekalia/fal-mcp-ts"
+  },
+  "dependencies": {
+    "@fal-ai/client": "^1.1.1",
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
