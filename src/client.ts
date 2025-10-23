@@ -59,6 +59,7 @@ export async function publicRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const response = await fetch(url, {
+    method: "GET",
     ...options,
     headers: {
       "Content-Type": "application/json",

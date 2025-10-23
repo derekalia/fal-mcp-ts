@@ -16,7 +16,7 @@ A Model Context Protocol (MCP) server for interacting with [fal.ai](https://fal.
 ### Via npm (Recommended)
 
 \`\`\`bash
-npm install -g @fal-ai/mcp-server
+npm install -g @derekalia/fal-mcp-server
 \`\`\`
 
 ### From Source
@@ -53,7 +53,7 @@ Add to your Claude Desktop config file:
   "mcpServers": {
     "fal": {
       "command": "npx",
-      "args": ["-y", "@fal-ai/mcp-server"],
+      "args": ["-y", "@derekalia/fal-mcp-server"],
       "env": {
         "FAL_KEY": "your-fal-api-key-here"
       }
@@ -71,7 +71,7 @@ Add to \`~/.cursor/mcp.json\`:
   "mcpServers": {
     "fal": {
       "command": "npx",
-      "args": ["-y", "@fal-ai/mcp-server"],
+      "args": ["-y", "@derekalia/fal-mcp-server"],
       "env": {
         "FAL_KEY": "your-fal-api-key-here"
       }
@@ -85,7 +85,7 @@ Add to \`~/.cursor/mcp.json\`:
 For other MCP clients, use the command:
 
 \`\`\`bash
-FAL_KEY="your-api-key" npx -y @fal-ai/mcp-server
+FAL_KEY="your-api-key" npx -y @derekalia/fal-mcp-server
 \`\`\`
 
 ## Available Tools

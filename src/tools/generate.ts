@@ -88,7 +88,9 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
  */
 export async function getResult(app_id: string, request_id: string): Promise<QueueResult> {
   const url = `${FAL_QUEUE_URL}/${app_id}/requests/${request_id}`;
-  return falRequest<QueueResult>(url);
+  return falRequest<QueueResult>(url, {
+    method: "GET",
+  });
 }
 
 /**
@@ -96,7 +98,9 @@ export async function getResult(app_id: string, request_id: string): Promise<Que
  */
 export async function getStatus(app_id: string, request_id: string): Promise<QueueStatus> {
   const url = `${FAL_QUEUE_URL}/${app_id}/requests/${request_id}/status`;
-  return falRequest<QueueStatus>(url);
+  return falRequest<QueueStatus>(url, {
+    method: "GET",
+  });
 }
 
 /**

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "fal": {
+      "command": "fal-mcp-server",
+      "env": {
+        "FAL_KEY": "your-fal-api-key-here"
+      }
+    }
+  }
+}

@@ -83,16 +83,10 @@ export async function searchModels(
  * Get the input/output schema for a specific model
  */
 export async function getModelSchema(appId: string): Promise<SchemaResult> {
-  // Extract owner and path from app_id
-  const parts = appId.split("/");
-  if (parts.length < 3) {
-    throw new Error("Invalid app_id format. Expected: owner/model/version");
-  }
-
-  const [owner, model, ...versionParts] = parts;
-  const version = versionParts.join("/");
-
-  // Use the REST API endpoint for schema information
-  const url = `${FAL_REST_URL}/aliases/${owner}/${model}/${version}`;
-  return publicRequest<SchemaResult>(url);
+  // Use the app_id directly in the REST API endpoint
+  // The API expects the full path after /aliases/
+  const url = `${FAL_REST_URL}/aliases/${appId}`;
+  return publicRequest<SchemaResult>(url, {
+    method: "GET",
+  });
 }
