@@ -51,11 +51,19 @@ export async function falRequest<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(url, {
-    ...options,
+  // Build fetch options, excluding body for GET requests
+  const fetchOptions: RequestInit = {
     method,
     headers,
-  });
+    signal: options.signal,
+  };
+
+  // Only include body for methods that support it
+  if (method !== "GET" && method !== "HEAD" && options.body) {
+    fetchOptions.body = options.body;
+  }
+
+  const response = await fetch(url, fetchOptions);
 
   if (!response.ok) {
     const errorText = await response.text();
