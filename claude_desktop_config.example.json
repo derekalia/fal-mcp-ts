@@ -2,7 +2,7 @@
   "mcpServers": {
     "fal": {
       "command": "npx",
-      "args": ["-y", "@derekalia/fal-mcp-server"],
+      "args": ["-y", "fal-ai-mcp-server"],
       "env": {
         "FAL_KEY": "your-fal-api-key-here"
       }
