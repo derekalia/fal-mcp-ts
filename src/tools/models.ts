@@ -7,6 +7,18 @@ import { publicRequest } from "../client.js";
 const FAL_BASE_URL = "https://fal.ai/api";
 const FAL_REST_URL = "https://rest.alpha.fal.ai";
 
+// API response structure from fal.ai uses "items" not "models"
+interface FalApiResponse {
+  items: Array<{
+    id: string;
+    title: string;
+    shortDescription?: string;
+    category?: string;
+    [key: string]: any;
+  }>;
+  [key: string]: any;
+}
+
 export interface ModelsResult {
   models: Array<{
     id: string;
@@ -58,51 +70,60 @@ export async function listModels(
   }
 
   const url = `${FAL_BASE_URL}/models?${params.toString()}`;
-  return publicRequest<ModelsResult>(url);
+  const response = await publicRequest<FalApiResponse>(url);
+
+  // Transform API response to our expected format
+  const models = response.items.map(item => ({
+    ...item,
+    name: item.title,
+    description: item.shortDescription,
+  }));
+
+  return {
+    models,
+    total: models.length,
+    page,
+    totalPages: 1,
+  };
 }
 
 /**
- * Search for models in the fal.ai gallery
- * Note: fal.ai doesn't have a dedicated search endpoint, so we fetch all models
- * and filter client-side
+ * Search for models in the fal.ai gallery using the keywords parameter
  */
 export async function searchModels(
   query: string,
   page: number = 1,
   limit: number = 50
 ): Promise<SearchResult> {
-  // Fetch models and filter client-side since there's no search API
-  const allModels = await listModels(undefined, 1, 100);
+  const params = new URLSearchParams({
+    keywords: query,
+    page: page.toString(),
+    limit: Math.min(limit, 100).toString(),
+  });
 
-  const lowerQuery = query.toLowerCase();
-  const filteredModels = allModels.models.filter(model =>
-    model.id?.toLowerCase().includes(lowerQuery) ||
-    model.name?.toLowerCase().includes(lowerQuery) ||
-    model.description?.toLowerCase().includes(lowerQuery) ||
-    model.category?.toLowerCase().includes(lowerQuery)
-  );
+  const url = `${FAL_BASE_URL}/models?${params.toString()}`;
+  const response = await publicRequest<FalApiResponse>(url);
 
-  const total = filteredModels.length;
-  const totalPages = Math.ceil(total / limit);
-  const startIndex = (page - 1) * limit;
-  const endIndex = startIndex + limit;
-  const paginatedModels = filteredModels.slice(startIndex, endIndex);
+  // Transform API response to our expected format
+  const models = response.items.map(item => ({
+    ...item,
+    name: item.title,
+    description: item.shortDescription,
+  }));
 
   return {
-    models: paginatedModels,
-    total,
+    models,
+    total: models.length,
     page,
-    totalPages,
+    totalPages: 1,
   };
 }
 
 /**
- * Get the input/output schema for a specific model
+ * Get the OpenAPI schema for a specific model
  */
 export async function getModelSchema(appId: string): Promise<SchemaResult> {
-  // Use the app_id directly in the REST API endpoint
-  // The API expects the full path after /aliases/
-  const url = `${FAL_REST_URL}/aliases/${appId}`;
+  const url = `${FAL_BASE_URL}/openapi/queue/openapi.json?endpoint_id=${appId}`;
   return publicRequest<SchemaResult>(url, {
     method: "GET",
   });
