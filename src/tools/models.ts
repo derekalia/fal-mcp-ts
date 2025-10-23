@@ -63,20 +63,37 @@ export async function listModels(
 
 /**
  * Search for models in the fal.ai gallery
+ * Note: fal.ai doesn't have a dedicated search endpoint, so we fetch all models
+ * and filter client-side
  */
 export async function searchModels(
   query: string,
   page: number = 1,
   limit: number = 50
 ): Promise<SearchResult> {
-  const params = new URLSearchParams({
-    q: query,
-    page: page.toString(),
-    limit: Math.min(limit, 100).toString(),
-  });
+  // Fetch models and filter client-side since there's no search API
+  const allModels = await listModels(undefined, 1, 100);
 
-  const url = `${FAL_BASE_URL}/models/search?${params.toString()}`;
-  return publicRequest<SearchResult>(url);
+  const lowerQuery = query.toLowerCase();
+  const filteredModels = allModels.models.filter(model =>
+    model.id?.toLowerCase().includes(lowerQuery) ||
+    model.name?.toLowerCase().includes(lowerQuery) ||
+    model.description?.toLowerCase().includes(lowerQuery) ||
+    model.category?.toLowerCase().includes(lowerQuery)
+  );
+
+  const total = filteredModels.length;
+  const totalPages = Math.ceil(total / limit);
+  const startIndex = (page - 1) * limit;
+  const endIndex = startIndex + limit;
+  const paginatedModels = filteredModels.slice(startIndex, endIndex);
+
+  return {
+    models: paginatedModels,
+    total,
+    page,
+    totalPages,
+  };
 }
 
 /**
