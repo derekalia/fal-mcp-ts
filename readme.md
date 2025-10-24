@@ -62,6 +62,26 @@ Add to your Claude Desktop config file:
 }
 \`\`\`
 
+#### Claude Code
+
+For project-specific configuration, create a \`.mcp.json\` file in your project root:
+
+\`\`\`json
+{
+  "mcpServers": {
+    "fal": {
+      "command": "npx",
+      "args": ["-y", "fal-ai-mcp-server@latest"],
+      "env": {
+        "FAL_KEY": "your-fal-api-key-here"
+      }
+    }
+  }
+}
+\`\`\`
+
+**Using \`@latest\` ensures you always get the newest version automatically!**
+
 #### Cursor
 
 Add to \`~/.cursor/mcp.json\`:
