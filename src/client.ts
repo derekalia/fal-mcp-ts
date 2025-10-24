@@ -3,6 +3,8 @@
  */
 
 import { fal } from "@fal-ai/client";
+import https from "https";
+import { URL } from "url";
 
 /**
  * Configure the fal client with API key from environment
@@ -33,8 +35,53 @@ export async function falRequest<T>(
   }
 
   const method = (options.method || "GET").toUpperCase();
+
+  // For GET requests, use https module to ensure no body is sent
+  if (method === "GET" || method === "HEAD") {
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url);
+      const requestOptions = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || 443,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: method,
+        headers: {
+          "Authorization": `Key ${apiKey}`,
+        },
+      };
+
+      const req = https.request(requestOptions, (res) => {
+        let data = "";
+
+        res.on("data", (chunk) => {
+          data += chunk;
+        });
+
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              resolve(JSON.parse(data) as T);
+            } catch (e) {
+              reject(new Error(`Failed to parse JSON response: ${data}`));
+            }
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          }
+        });
+      });
+
+      req.on("error", (error) => {
+        reject(error);
+      });
+
+      req.end(); // Important: no body is sent
+    });
+  }
+
+  // For POST/PUT/PATCH, use fetch as before
   const headers: Record<string, string> = {
     "Authorization": `Key ${apiKey}`,
+    "Content-Type": "application/json",
   };
 
   // Copy existing headers if any
@@ -46,24 +93,12 @@ export async function falRequest<T>(
     });
   }
 
-  // Only set Content-Type for methods that can have a body
-  if (method === "POST" || method === "PUT" || method === "PATCH") {
-    headers["Content-Type"] = "application/json";
-  }
-
-  // Build fetch options, excluding body for GET requests
-  const fetchOptions: RequestInit = {
+  const response = await fetch(url, {
     method,
     headers,
+    body: options.body,
     signal: options.signal,
-  };
-
-  // Only include body for methods that support it
-  if (method !== "GET" && method !== "HEAD" && options.body) {
-    fetchOptions.body = options.body;
-  }
-
-  const response = await fetch(url, fetchOptions);
+  });
 
   if (!response.ok) {
     const errorText = await response.text();

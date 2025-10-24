@@ -58,9 +58,8 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
   // Use queue endpoint for async processing
   const url = `${FAL_QUEUE_URL}/${app_id}`;
 
-  const payload: Record<string, any> = {
-    input: input_data,
-  };
+  // Send input_data directly as the payload - don't wrap in "input"
+  const payload: Record<string, any> = { ...input_data };
 
   if (webhook_url) {
     payload.webhook_url = webhook_url;
@@ -76,27 +75,51 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
 }
 
 /**
- * Get the result of a generation request using the response_url from the queue
+ * Parse app_id to extract owner and alias
+ * Examples: "fal-ai/flux/dev" -> owner: "fal-ai", alias: "flux"
  */
-export async function getResult(url: string): Promise<QueueResult> {
+function parseAppId(appId: string): { owner: string; alias: string } {
+  const parts = appId.split("/");
+  if (parts.length < 2) {
+    throw new Error(`Invalid app_id format: ${appId}. Expected format: owner/alias or owner/alias/version`);
+  }
+  return {
+    owner: parts[0],
+    alias: parts[1],
+  };
+}
+
+/**
+ * Get the result of a generation request
+ */
+export async function getResult(appId: string, requestId: string): Promise<QueueResult> {
+  const { owner, alias } = parseAppId(appId);
+  const url = `${FAL_QUEUE_URL}/${owner}/${alias}/requests/${requestId}`;
+
   return falRequest<QueueResult>(url, {
     method: "GET",
   });
 }
 
 /**
- * Check the status of a generation request using the status_url from the queue
+ * Check the status of a generation request
  */
-export async function getStatus(url: string): Promise<QueueStatus> {
+export async function getStatus(appId: string, requestId: string): Promise<QueueStatus> {
+  const { owner, alias } = parseAppId(appId);
+  const url = `${FAL_QUEUE_URL}/${owner}/${alias}/requests/${requestId}/status`;
+
   return falRequest<QueueStatus>(url, {
     method: "GET",
   });
 }
 
 /**
- * Cancel a pending or processing generation request using the cancel_url from the queue
+ * Cancel a pending or processing generation request
  */
-export async function cancelRequest(url: string): Promise<CancelResult> {
+export async function cancelRequest(appId: string, requestId: string): Promise<CancelResult> {
+  const { owner, alias } = parseAppId(appId);
+  const url = `${FAL_QUEUE_URL}/${owner}/${alias}/requests/${requestId}/cancel`;
+
   return falRequest<CancelResult>(url, {
     method: "PUT",
   });

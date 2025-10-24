@@ -6,7 +6,7 @@ import { readFile } from "fs/promises";
 import { basename } from "path";
 import { falRequest } from "../client.js";
 
-const FAL_BASE_URL = "https://fal.ai/api";
+const FAL_REST_URL = "https://rest.alpha.fal.ai";
 
 export interface UploadResult {
   url: string;
@@ -16,8 +16,14 @@ export interface UploadResult {
   [key: string]: any;
 }
 
+interface InitiateUploadResponse {
+  file_url: string;
+  upload_url: string;
+}
+
 /**
  * Upload a file to fal.ai CDN for use with models
+ * Uses the two-step upload process: initiate then upload
  */
 export async function uploadFile(
   filePath: string,
@@ -48,37 +54,35 @@ export async function uploadFile(
     contentType = (ext && mimeTypes[ext]) || "application/octet-stream";
   }
 
-  // Create multipart form data
-  const formData = new FormData();
-  const blob = new Blob([fileContent], { type: contentType });
-  formData.append("file", blob, fileName);
-
-  // Upload to fal.ai storage endpoint
-  const url = `${FAL_BASE_URL}/storage/upload`;
-
-  const apiKey = process.env.FAL_KEY;
-  if (!apiKey) {
-    throw new Error("FAL_KEY environment variable is not set");
-  }
-
-  const response = await fetch(url, {
+  // Step 1: Initiate upload
+  const initiateUrl = `${FAL_REST_URL}/storage/upload/initiate?storage_type=fal-cdn-v3`;
+  const initiateResponse = await falRequest<InitiateUploadResponse>(initiateUrl, {
     method: "POST",
-    headers: {
-      "Authorization": `Key ${apiKey}`,
-    },
-    body: formData,
+    body: JSON.stringify({
+      content_type: contentType,
+      file_name: fileName,
+    }),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Upload failed: HTTP ${response.status}: ${errorText}`);
+  const { upload_url: uploadUrl, file_url: fileUrl } = initiateResponse;
+
+  // Step 2: Upload file content to the upload URL
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    body: fileContent,
+    headers: {
+      "Content-Type": contentType,
+    },
+  });
+
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(`Upload failed: HTTP ${uploadResponse.status}: ${errorText}`);
   }
 
-  const result = (await response.json()) as Record<string, any>;
-
-  // Add file metadata to response
+  // Return the file URL and metadata
   return {
-    ...result,
+    url: fileUrl,
     size: fileContent.length,
     content_type: contentType,
   } as UploadResult;
