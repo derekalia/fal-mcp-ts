@@ -4,12 +4,17 @@ A Model Context Protocol (MCP) server for interacting with [fal.ai](https://fal.
 
 ## Features
 
-- **Model Discovery**: List and search through fal.ai's model gallery
-- **Schema Inspection**: Get detailed input/output schemas for any model
+- **Model Discovery**: List and search through fal.ai's model gallery using Platform API v1
+- **Advanced Search**: Free-text search with filtering by category, status, and more
+- **Model Lookup**: Find specific models by endpoint ID with optional schema expansion
+- **Pricing Information**: Get real-time pricing for models (output-based or GPU-based)
+- **Cost Estimation**: Estimate costs using historical API pricing or unit pricing
+- **Schema Inspection**: Get detailed input/output schemas with inline OpenAPI expansion
 - **Content Generation**: Generate images, videos, and other content using AI models
 - **Queue Management**: Track generation status, retrieve results, and cancel requests
 - **File Upload**: Upload files to fal.ai CDN for use with models
 - **Full TypeScript Support**: Type-safe API with comprehensive TypeScript definitions
+- **Cursor-based Pagination**: Efficient pagination through large result sets
 
 ## Installation
 
@@ -112,36 +117,59 @@ FAL_KEY="your-api-key" npx -y fal-ai-mcp-server
 
 ### \`models\`
 
-List available models in the fal.ai model gallery.
+List available models in the fal.ai model gallery using the Platform API v1.
 
 **Parameters:**
-- \`category\` (optional): Filter by category (e.g., "Animation", "3D", "Image Generation")
-- \`page\` (optional): Page number for pagination (default: 1)
+- \`category\` (optional): Filter by category (e.g., "text-to-image", "image-to-video", "training")
+- \`cursor\` (optional): Pagination cursor from previous response
 - \`limit\` (optional): Models per page (default: 100, max: 100)
+- \`status\` (optional): Filter by status - "active" or "deprecated"
+- \`expand\` (optional): Array of fields to expand. Supported: ["openapi-3.0"] to include full OpenAPI schema
 
 **Example:**
 \`\`\`javascript
 {
-  "category": "Image Generation",
-  "page": 1,
-  "limit": 50
+  "category": "text-to-image",
+  "status": "active",
+  "limit": 50,
+  "expand": ["openapi-3.0"]
 }
 \`\`\`
 
 ### \`search\`
 
-Search for models by keywords.
+Search for models using free-text query across name, description, and category.
 
 **Parameters:**
-- \`query\` (required): Search query string
-- \`page\` (optional): Page number (default: 1)
+- \`query\` (required): Free-text search query
+- \`cursor\` (optional): Pagination cursor from previous response
 - \`limit\` (optional): Results per page (default: 50, max: 100)
+- \`category\` (optional): Filter by category
+- \`status\` (optional): Filter by status - "active" or "deprecated"
+- \`expand\` (optional): Array of fields to expand. Supported: ["openapi-3.0"]
 
 **Example:**
 \`\`\`javascript
 {
   "query": "flux image generation",
+  "status": "active",
   "limit": 20
+}
+\`\`\`
+
+### \`find\`
+
+Find specific model(s) by endpoint ID. Can retrieve single or multiple models.
+
+**Parameters:**
+- \`endpoint_ids\` (required): Array of endpoint IDs (1-50 models)
+- \`expand\` (optional): Array of fields to expand. Supported: ["openapi-3.0"]
+
+**Example:**
+\`\`\`javascript
+{
+  "endpoint_ids": ["fal-ai/flux/dev", "fal-ai/flux-pro"],
+  "expand": ["openapi-3.0"]
 }
 \`\`\`
 
@@ -244,13 +272,111 @@ Upload a file to fal.ai CDN for use with models.
 }
 \`\`\`
 
+### \`pricing\`
+
+Get pricing information for specific model endpoint(s). Requires authentication.
+
+**Parameters:**
+- \`endpoint_ids\` (required): Array of endpoint IDs to get pricing for (1-50 models)
+- \`cursor\` (optional): Pagination cursor from previous response
+
+**Example:**
+\`\`\`javascript
+{
+  "endpoint_ids": ["fal-ai/flux/dev", "fal-ai/flux-pro"]
+}
+\`\`\`
+
+**Response:**
+\`\`\`javascript
+{
+  "prices": [
+    {
+      "endpoint_id": "fal-ai/flux/dev",
+      "unit_price": 0.025,
+      "unit": "image",
+      "currency": "USD"
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}
+\`\`\`
+
+### \`estimate_cost\`
+
+Estimate costs for model operations. Requires authentication. Useful for budget planning and cost optimization.
+
+**Estimation Methods:**
+
+1. **Historical API Price** (\`historical_api_price\`):
+   - Based on historical pricing per API call from past usage patterns
+   - Use when you know the number of API calls you'll make
+   - Example: "How much will 100 calls to flux/dev cost?"
+
+2. **Unit Price** (\`unit_price\`):
+   - Based on unit price × expected billing units (images, videos, etc.)
+   - Use when you know the expected output quantity
+   - Example: "How much will 50 images from flux/dev cost?"
+
+**Parameters:**
+- \`estimate_type\` (required): Either "historical_api_price" or "unit_price"
+- \`endpoints\` (required): Map of endpoint IDs to quantities
+
+**Example - Historical API Price:**
+\`\`\`javascript
+{
+  "estimate_type": "historical_api_price",
+  "endpoints": {
+    "fal-ai/flux/dev": {
+      "call_quantity": 100
+    },
+    "fal-ai/flux/schnell": {
+      "call_quantity": 50
+    }
+  }
+}
+\`\`\`
+
+**Example - Unit Price:**
+\`\`\`javascript
+{
+  "estimate_type": "unit_price",
+  "endpoints": {
+    "fal-ai/flux/dev": {
+      "unit_quantity": 50
+    },
+    "fal-ai/flux-pro": {
+      "unit_quantity": 25
+    }
+  }
+}
+\`\`\`
+
+**Response:**
+\`\`\`javascript
+{
+  "estimate_type": "unit_price",
+  "total_cost": 1.88,
+  "currency": "USD"
+}
+\`\`\`
+
 ## Usage Examples
 
 ### With Claude Desktop
 
 Once configured, you can use natural language to interact with fal.ai:
 
-> "Search for flux models"
+> "Search for active flux models"
+
+> "Find the model details for fal-ai/flux/dev"
+
+> "Get pricing information for fal-ai/flux/dev and fal-ai/flux-pro"
+
+> "Estimate the cost of generating 50 images using fal-ai/flux/dev"
+
+> "How much would 100 API calls to flux/dev cost based on historical pricing?"
 
 > "Generate an image of a cat wearing a hat using fal-ai/flux/dev"
 

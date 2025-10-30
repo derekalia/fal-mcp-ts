@@ -16,61 +16,111 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { configureFalClient } from "./client.js";
-import { listModels, searchModels, getModelSchema } from "./tools/models.js";
+import { listModels, searchModels, getModelSchema, findModels, getPricing, estimateCost } from "./tools/models.js";
 import { generate, getResult, getStatus, cancelRequest } from "./tools/generate.js";
 import { uploadFile } from "./tools/storage.js";
 
 // Server metadata
 const SERVER_NAME = "fal.ai MCP Server";
-const SERVER_VERSION = "1.0.0";
+const SERVER_VERSION = "2.0.0";
 
 // Tool definitions
 const TOOLS: Tool[] = [
   {
     name: "models",
-    description: "List available models in the fal.ai model gallery. Supports optional filtering by category and pagination.",
+    description: "List available models in the fal.ai model gallery. Supports optional filtering by category, status, and cursor-based pagination. Can expand OpenAPI schemas inline with expand parameter.",
     inputSchema: {
       type: "object",
       properties: {
         category: {
           type: "string",
-          description: "Optional category to filter models (e.g., 'Animation', '3D', 'Image Generation')",
+          description: "Optional category to filter models (e.g., 'text-to-image', 'image-to-video', 'training')",
         },
-        page: {
-          type: "number",
-          description: "Page number for pagination (default: 1)",
-          default: 1,
+        cursor: {
+          type: "string",
+          description: "Pagination cursor from previous response (for next page)",
         },
         limit: {
           type: "number",
           description: "Number of models per page (default: 100, max: 100)",
           default: 100,
         },
+        status: {
+          type: "string",
+          enum: ["active", "deprecated"],
+          description: "Filter by model status - 'active' or 'deprecated' (omit to include all)",
+        },
+        expand: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          description: "Fields to expand in response. Supported: 'openapi-3.0' (includes full OpenAPI schema)",
+        },
       },
     },
   },
   {
     name: "search",
-    description: "Search for models in the fal.ai gallery using keywords.",
+    description: "Search for models in the fal.ai gallery using free-text query across name, description, and category. Supports filtering and cursor-based pagination.",
     inputSchema: {
       type: "object",
       properties: {
         query: {
           type: "string",
-          description: "Search query string",
+          description: "Free-text search query (searches name, description, category)",
         },
-        page: {
-          type: "number",
-          description: "Page number for pagination (default: 1)",
-          default: 1,
+        cursor: {
+          type: "string",
+          description: "Pagination cursor from previous response (for next page)",
         },
         limit: {
           type: "number",
           description: "Number of results per page (default: 50, max: 100)",
           default: 50,
         },
+        category: {
+          type: "string",
+          description: "Optional category to filter results (e.g., 'text-to-image', 'image-to-video')",
+        },
+        status: {
+          type: "string",
+          enum: ["active", "deprecated"],
+          description: "Filter by model status - 'active' or 'deprecated' (omit to include all)",
+        },
+        expand: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          description: "Fields to expand in response. Supported: 'openapi-3.0' (includes full OpenAPI schema)",
+        },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "find",
+    description: "Find specific model(s) by endpoint ID. Can retrieve single or multiple models (1-50). Useful for looking up exact models by their stable identifiers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        endpoint_ids: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          description: "Endpoint ID(s) to retrieve (e.g., ['fal-ai/flux/dev', 'fal-ai/flux-pro']). Can specify 1-50 models.",
+        },
+        expand: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          description: "Fields to expand in response. Supported: 'openapi-3.0' (includes full OpenAPI schema)",
+        },
+      },
+      required: ["endpoint_ids"],
     },
   },
   {
@@ -187,6 +237,49 @@ const TOOLS: Tool[] = [
       required: ["file_path"],
     },
   },
+  {
+    name: "pricing",
+    description: "Get pricing information for specific model endpoint(s). Returns unit pricing with currency. Requires authentication. Most models use output-based pricing (per image/video).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        endpoint_ids: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          description: "Endpoint ID(s) to get pricing for (e.g., ['fal-ai/flux/dev']). Must provide at least 1 endpoint ID (1-50 models).",
+        },
+        cursor: {
+          type: "string",
+          description: "Pagination cursor from previous response (for next page)",
+        },
+      },
+      required: ["endpoint_ids"],
+    },
+  },
+  {
+    name: "estimate_cost",
+    description: "Estimate costs for model operations using historical API pricing or unit pricing. Requires authentication. Useful for budget planning and cost optimization.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        estimate_type: {
+          type: "string",
+          enum: ["historical_api_price", "unit_price"],
+          description: "Estimation method: 'historical_api_price' (based on API call history) or 'unit_price' (based on billing units like images/videos)",
+        },
+        endpoints: {
+          type: "object",
+          description: "Map of endpoint IDs to quantities. For 'historical_api_price': use {endpoint_id: {call_quantity: number}}. For 'unit_price': use {endpoint_id: {unit_quantity: number}}",
+          additionalProperties: {
+            type: "object",
+          },
+        },
+      },
+      required: ["estimate_type", "endpoints"],
+    },
+  },
 ];
 
 /**
@@ -239,8 +332,10 @@ async function main() {
         case "models": {
           const result = await listModels(
             args.category as string | undefined,
-            (args.page as number) || 1,
-            (args.limit as number) || 100
+            args.cursor as string | undefined,
+            (args.limit as number) || 100,
+            args.status as "active" | "deprecated" | undefined,
+            args.expand as string[] | undefined
           );
           return {
             content: [
@@ -258,8 +353,29 @@ async function main() {
           }
           const result = await searchModels(
             args.query as string,
-            (args.page as number) || 1,
-            (args.limit as number) || 50
+            args.cursor as string | undefined,
+            (args.limit as number) || 50,
+            args.category as string | undefined,
+            args.status as "active" | "deprecated" | undefined,
+            args.expand as string[] | undefined
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "find": {
+          if (!args.endpoint_ids || !Array.isArray(args.endpoint_ids)) {
+            throw new Error("endpoint_ids parameter is required and must be an array");
+          }
+          const result = await findModels(
+            args.endpoint_ids as string[],
+            args.expand as string[] | undefined
           );
           return {
             content: [
@@ -359,6 +475,49 @@ async function main() {
             args.file_path as string,
             args.content_type as string | undefined
           );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "pricing": {
+          if (!args.endpoint_ids || !Array.isArray(args.endpoint_ids)) {
+            throw new Error("endpoint_ids parameter is required and must be an array");
+          }
+          const result = await getPricing(
+            args.endpoint_ids as string[],
+            args.cursor as string | undefined
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "estimate_cost": {
+          if (!args.estimate_type || !args.endpoints) {
+            throw new Error("estimate_type and endpoints parameters are required");
+          }
+
+          const estimateType = args.estimate_type as string;
+          if (estimateType !== "historical_api_price" && estimateType !== "unit_price") {
+            throw new Error("estimate_type must be 'historical_api_price' or 'unit_price'");
+          }
+
+          const result = await estimateCost({
+            estimate_type: estimateType as "historical_api_price" | "unit_price",
+            endpoints: args.endpoints as Record<string, any>,
+          } as any);
+
           return {
             content: [
               {
