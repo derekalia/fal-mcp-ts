@@ -9,6 +9,8 @@ A Model Context Protocol (MCP) server for interacting with [fal.ai](https://fal.
 - **Model Lookup**: Find specific models by endpoint ID with optional schema expansion
 - **Pricing Information**: Get real-time pricing for models (output-based or GPU-based)
 - **Cost Estimation**: Estimate costs using historical API pricing or unit pricing
+- **Usage Tracking**: Get detailed billing usage records with time-series data
+- **Analytics**: Track request counts, latency statistics, and success/error rates
 - **Schema Inspection**: Get detailed input/output schemas with inline OpenAPI expansion
 - **Content Generation**: Generate images, videos, and other content using AI models
 - **Queue Management**: Track generation status, retrieve results, and cancel requests
@@ -86,6 +88,8 @@ For project-specific configuration, create a \`.mcp.json\` file in your project 
 \`\`\`
 
 **Using \`@latest\` ensures you always get the newest version automatically!**
+
+**Security Note:** Never commit \`.mcp.json\` files containing API keys to version control. Add it to your \`.gitignore\` file.
 
 #### Cursor
 
@@ -362,22 +366,126 @@ Estimate costs for model operations. Requires authentication. Useful for budget 
 }
 \`\`\`
 
+### \`usage\`
+
+Get usage records for your workspace with detailed billing information. Returns time-series data and/or summary statistics with unit quantities and prices. Requires authentication.
+
+**Parameters:**
+- \`endpoint_ids\` (required): Array of endpoint IDs to get usage for (1-50 models)
+- \`start\` (optional): Start date in ISO8601 format (e.g., "2025-01-01" or "2025-01-01T00:00:00Z"). Defaults to 24 hours ago
+- \`end\` (optional): End date in ISO8601 format. Defaults to current time
+- \`timeframe\` (optional): Aggregation timeframe - "minute", "hour", "day", "week", or "month". Auto-detected if not specified
+- \`timezone\` (optional): Timezone for date aggregation (e.g., "UTC", "America/New_York"). Defaults to "UTC"
+- \`bound_to_timeframe\` (optional): Whether to align start/end dates to timeframe boundaries. Defaults to true
+- \`expand\` (optional): Array of data to include - "time_series", "summary", "auth_method". Defaults to ["time_series"]
+- \`cursor\` (optional): Pagination cursor from previous response
+- \`limit\` (optional): Maximum number of items to return
+
+**Example:**
+\`\`\`javascript
+{
+  "endpoint_ids": ["fal-ai/flux/dev", "fal-ai/nano-banana"],
+  "start": "2025-10-01",
+  "end": "2025-10-31",
+  "timeframe": "day",
+  "expand": ["time_series", "summary"]
+}
+\`\`\`
+
+**Response:**
+\`\`\`javascript
+{
+  "time_series": [
+    {
+      "bucket": "2025-10-23T00:00:00+00:00",
+      "results": [
+        {
+          "endpoint_id": "fal-ai/flux/dev",
+          "unit": "shared_gateway_request",
+          "quantity": 8,
+          "unit_price": 0.025
+        }
+      ]
+    }
+  ],
+  "summary": [
+    {
+      "endpoint_id": "fal-ai/flux/dev",
+      "unit": "shared_gateway_request",
+      "quantity": 15,
+      "unit_price": 0.025
+    }
+  ]
+}
+\`\`\`
+
+### \`analytics\`
+
+Get analytics data for model endpoints with time-bucketed metrics. Returns request counts, latency statistics (avg, p50, p95, p99), and success/error rates. Requires authentication.
+
+**Parameters:**
+- \`endpoint_ids\` (required): Array of endpoint IDs to get analytics for (1-50 models)
+- \`start\` (optional): Start date in ISO8601 format. Defaults to 24 hours ago
+- \`end\` (optional): End date in ISO8601 format. Defaults to current time
+- \`timeframe\` (optional): Time bucket size - "hour", "day", "week", or "month". Auto-detected if not specified
+- \`timezone\` (optional): Timezone for date aggregation. Defaults to "UTC"
+- \`bound_to_timeframe\` (optional): Whether to align start/end dates to timeframe boundaries. Defaults to true
+- \`metric\` (optional): Filter to return only specific metric - "total_requests", "successful_requests", "failed_requests", or "avg_latency_ms"
+- \`cursor\` (optional): Pagination cursor from previous response
+- \`limit\` (optional): Maximum number of items to return
+
+**Example:**
+\`\`\`javascript
+{
+  "endpoint_ids": ["fal-ai/flux/dev"],
+  "start": "2025-10-01",
+  "timeframe": "day"
+}
+\`\`\`
+
+**Response:**
+\`\`\`javascript
+{
+  "time_series": [
+    {
+      "bucket": "2025-10-23T00:00:00+00:00",
+      "results": [
+        {
+          "endpoint_id": "fal-ai/flux/dev",
+          "request_count": 19
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
 ## Usage Examples
 
 ### With Claude Desktop
 
 Once configured, you can use natural language to interact with fal.ai:
 
+**Model Discovery:**
 > "Search for active flux models"
 
 > "Find the model details for fal-ai/flux/dev"
 
+**Pricing & Cost Management:**
 > "Get pricing information for fal-ai/flux/dev and fal-ai/flux-pro"
 
 > "Estimate the cost of generating 50 images using fal-ai/flux/dev"
 
 > "How much would 100 API calls to flux/dev cost based on historical pricing?"
 
+**Usage & Analytics:**
+> "Show me my usage for fal-ai/nano-banana in the last 2 weeks"
+
+> "Get analytics for fal-ai/flux/dev for the past month"
+
+> "What's my total spending on flux/dev this month?"
+
+**Content Generation:**
 > "Generate an image of a cat wearing a hat using fal-ai/flux/dev"
 
 > "Check the status of my last generation request"
