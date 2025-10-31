@@ -356,3 +356,161 @@ export async function estimateCost(
     body: JSON.stringify(request),
   });
 }
+
+// Usage tracking API types and functions
+export interface UsageLineItem {
+  endpoint_id: string;
+  unit: string;
+  quantity: number;
+  unit_price: number;
+  auth_method?: string;
+}
+
+export interface UsageTimeBucket {
+  bucket: string;
+  results: UsageLineItem[];
+}
+
+export interface UsageResult {
+  time_series?: UsageTimeBucket[];
+  summary?: UsageLineItem[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export type UsageTimeframe = "minute" | "hour" | "day" | "week" | "month";
+export type UsageExpand = "time_series" | "summary" | "auth_method";
+
+export interface UsageOptions {
+  endpoint_ids: string[];
+  start?: string;
+  end?: string;
+  timezone?: string;
+  timeframe?: UsageTimeframe;
+  bound_to_timeframe?: boolean;
+  expand?: UsageExpand[];
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * Get usage records for workspace with filters
+ * Requires authentication
+ *
+ * Returns paginated usage records with billing details including:
+ * - Time series data grouped by time buckets
+ * - Aggregate summary statistics
+ * - Unit quantity and pricing information
+ * - Optional auth method tracking
+ */
+export async function getUsage(options: UsageOptions): Promise<UsageResult> {
+  const params = new URLSearchParams();
+
+  // Required: endpoint IDs
+  options.endpoint_ids.forEach(id => params.append("endpoint_id", id));
+
+  // Optional filters
+  if (options.start) params.append("start", options.start);
+  if (options.end) params.append("end", options.end);
+  if (options.timezone) params.append("timezone", options.timezone);
+  if (options.timeframe) params.append("timeframe", options.timeframe);
+  if (options.bound_to_timeframe !== undefined) {
+    params.append("bound_to_timeframe", String(options.bound_to_timeframe));
+  }
+  if (options.cursor) params.append("cursor", options.cursor);
+  if (options.limit) params.append("limit", String(options.limit));
+
+  // Expand options (defaults to time_series if not specified)
+  const expand = options.expand || ["time_series"];
+  expand.forEach(field => params.append("expand", field));
+
+  const url = `${FAL_API_V1}/models/usage?${params.toString()}`;
+
+  // Usage tracking requires authentication
+  return falRequest<UsageResult>(url, {
+    method: "GET",
+  });
+}
+
+// Analytics API types and functions
+export type AnalyticsTimeframe = "hour" | "day" | "week" | "month";
+export type AnalyticsMetric = "total_requests" | "successful_requests" | "failed_requests" | "avg_latency_ms";
+
+export interface AnalyticsOptions {
+  endpoint_ids: string[];
+  start?: string;
+  end?: string;
+  timezone?: string;
+  timeframe?: AnalyticsTimeframe;
+  bound_to_timeframe?: boolean;
+  metric?: AnalyticsMetric;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface AnalyticsBucket {
+  start: string;
+  end: string;
+  total_requests?: number;
+  successful_requests?: number;
+  failed_requests?: number;
+  avg_latency_ms?: number;
+  p50_latency_ms?: number;
+  p95_latency_ms?: number;
+  p99_latency_ms?: number;
+}
+
+export interface AnalyticsTimeseries {
+  endpoint_id: string;
+  buckets: AnalyticsBucket[];
+}
+
+export interface AnalyticsResult {
+  timeseries: AnalyticsTimeseries[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+/**
+ * Get analytics data for model endpoints
+ * Requires authentication
+ *
+ * Returns time-bucketed metrics including:
+ * - Request counts (total, successful, failed)
+ * - Latency statistics (avg, p50, p95, p99)
+ * - Success/error rates
+ *
+ * Supports flexible time windows and timezone handling
+ */
+export async function getAnalytics(options: AnalyticsOptions): Promise<AnalyticsResult> {
+  const params = new URLSearchParams();
+
+  // Required: endpoint IDs (1-50)
+  if (!options.endpoint_ids || options.endpoint_ids.length === 0) {
+    throw new Error("At least one endpoint_id is required");
+  }
+  if (options.endpoint_ids.length > 50) {
+    throw new Error("Maximum of 50 endpoint_ids allowed");
+  }
+
+  options.endpoint_ids.forEach(id => params.append("endpoint_id", id));
+
+  // Optional filters
+  if (options.start) params.append("start", options.start);
+  if (options.end) params.append("end", options.end);
+  if (options.timezone) params.append("timezone", options.timezone);
+  if (options.timeframe) params.append("timeframe", options.timeframe);
+  if (options.bound_to_timeframe !== undefined) {
+    params.append("bound_to_timeframe", String(options.bound_to_timeframe));
+  }
+  if (options.metric) params.append("metric", options.metric);
+  if (options.cursor) params.append("cursor", options.cursor);
+  if (options.limit) params.append("limit", String(options.limit));
+
+  const url = `${FAL_API_V1}/models/analytics?${params.toString()}`;
+
+  // Analytics requires authentication
+  return falRequest<AnalyticsResult>(url, {
+    method: "GET",
+  });
+}

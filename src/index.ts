@@ -16,13 +16,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { configureFalClient } from "./client.js";
-import { listModels, searchModels, getModelSchema, findModels, getPricing, estimateCost } from "./tools/models.js";
+import { listModels, searchModels, findModels, getPricing, estimateCost, getUsage, getAnalytics } from "./tools/models.js";
 import { generate, getResult, getStatus, cancelRequest } from "./tools/generate.js";
 import { uploadFile } from "./tools/storage.js";
 
 // Server metadata
 const SERVER_NAME = "fal.ai MCP Server";
-const SERVER_VERSION = "2.0.0";
+const SERVER_VERSION = "2.1.1";
 
 // Tool definitions
 const TOOLS: Tool[] = [
@@ -121,20 +121,6 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["endpoint_ids"],
-    },
-  },
-  {
-    name: "schema",
-    description: "Get the input/output schema for a specific model. Returns JSON schema describing what parameters the model accepts and what it returns.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        app_id: {
-          type: "string",
-          description: "The model application ID (e.g., 'fal-ai/flux/dev')",
-        },
-      },
-      required: ["app_id"],
     },
   },
   {
@@ -280,27 +266,136 @@ const TOOLS: Tool[] = [
       required: ["estimate_type", "endpoints"],
     },
   },
+  {
+    name: "usage",
+    description: "Get usage records for workspace with detailed billing information. Returns time series data and/or summary statistics with unit quantities and prices. Requires authentication.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        endpoint_ids: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          description: "Endpoint ID(s) to get usage for (e.g., ['fal-ai/flux/dev']). Must provide at least 1 endpoint ID (1-50 models).",
+        },
+        start: {
+          type: "string",
+          description: "Start date in ISO8601 format (e.g., '2025-01-01T00:00:00Z' or '2025-01-01'). Defaults to 24 hours ago.",
+        },
+        end: {
+          type: "string",
+          description: "End date in ISO8601 format (e.g., '2025-01-31T23:59:59Z' or '2025-01-31'). Defaults to current time.",
+        },
+        timezone: {
+          type: "string",
+          description: "Timezone for date aggregation (e.g., 'UTC', 'America/New_York'). Defaults to 'UTC'.",
+          default: "UTC",
+        },
+        timeframe: {
+          type: "string",
+          enum: ["minute", "hour", "day", "week", "month"],
+          description: "Aggregation timeframe for timeseries data. Auto-detected from date range if not specified.",
+        },
+        bound_to_timeframe: {
+          type: "boolean",
+          description: "Whether to align start/end dates to timeframe boundaries. Defaults to true.",
+          default: true,
+        },
+        expand: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["time_series", "summary", "auth_method"],
+          },
+          description: "Data to include: 'time_series' for time-bucketed data, 'summary' for aggregates, 'auth_method' for auth tracking. Defaults to ['time_series'].",
+        },
+        cursor: {
+          type: "string",
+          description: "Pagination cursor from previous response.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of items to return.",
+        },
+      },
+      required: ["endpoint_ids"],
+    },
+  },
+  {
+    name: "analytics",
+    description: "Get analytics data for model endpoints with time-bucketed metrics. Returns request counts, latency statistics (avg, p50, p95, p99), and success/error rates. Requires authentication.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        endpoint_ids: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          description: "Endpoint ID(s) to get analytics for (e.g., ['fal-ai/flux/dev']). Must provide at least 1, maximum 50 endpoint IDs.",
+        },
+        start: {
+          type: "string",
+          description: "Start date in ISO8601 format (e.g., '2025-01-01T00:00:00Z' or '2025-01-01'). Defaults to 24 hours ago.",
+        },
+        end: {
+          type: "string",
+          description: "End date in ISO8601 format (e.g., '2025-01-31T23:59:59Z' or '2025-01-31'). Defaults to current time.",
+        },
+        timezone: {
+          type: "string",
+          description: "Timezone for date aggregation (e.g., 'UTC', 'America/New_York'). Defaults to 'UTC'.",
+          default: "UTC",
+        },
+        timeframe: {
+          type: "string",
+          enum: ["hour", "day", "week", "month"],
+          description: "Time bucket size for aggregation. Auto-detected from date range if not specified.",
+        },
+        bound_to_timeframe: {
+          type: "boolean",
+          description: "Whether to align start/end dates to timeframe boundaries. Defaults to true.",
+          default: true,
+        },
+        metric: {
+          type: "string",
+          enum: ["total_requests", "successful_requests", "failed_requests", "avg_latency_ms"],
+          description: "Optional: Filter to return only specific metric in response.",
+        },
+        cursor: {
+          type: "string",
+          description: "Pagination cursor from previous response.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of items to return.",
+        },
+      },
+      required: ["endpoint_ids"],
+    },
+  },
 ];
 
 /**
  * Main server setup and execution
  */
 async function main() {
-  // Check for API key
+  // Check for API key - warn if missing but don't fail
+  // Platform API v1 works without auth (but with rate limits)
   if (!process.env.FAL_KEY) {
-    console.error("Error: FAL_KEY environment variable is not set.");
-    console.error("Please set your fal.ai API key:");
-    console.error("  export FAL_KEY='your-api-key-here'");
-    console.error("\nOr configure it in your MCP client settings.");
-    process.exit(1);
-  }
-
-  // Configure fal client
-  try {
-    configureFalClient();
-  } catch (error) {
-    console.error("Error configuring fal.ai client:", error);
-    process.exit(1);
+    console.error("Warning: FAL_KEY environment variable is not set.");
+    console.error("Some features (pricing, cost estimation, generation) require authentication.");
+    console.error("Model discovery and search will work with rate limits.");
+    console.error("\nTo enable all features, set your fal.ai API key in your MCP client settings.");
+  } else {
+    // Configure fal client only if key is available
+    try {
+      configureFalClient();
+    } catch (error) {
+      console.error("Warning: Error configuring fal.ai client:", error);
+      console.error("Continuing with limited functionality...");
+    }
   }
 
   // Create MCP server
@@ -377,21 +472,6 @@ async function main() {
             args.endpoint_ids as string[],
             args.expand as string[] | undefined
           );
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
-
-        case "schema": {
-          if (!args.app_id) {
-            throw new Error("app_id parameter is required");
-          }
-          const result = await getModelSchema(args.app_id as string);
           return {
             content: [
               {
@@ -517,6 +597,60 @@ async function main() {
             estimate_type: estimateType as "historical_api_price" | "unit_price",
             endpoints: args.endpoints as Record<string, any>,
           } as any);
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "usage": {
+          if (!args.endpoint_ids || !Array.isArray(args.endpoint_ids)) {
+            throw new Error("endpoint_ids parameter is required and must be an array");
+          }
+
+          const result = await getUsage({
+            endpoint_ids: args.endpoint_ids as string[],
+            start: args.start as string | undefined,
+            end: args.end as string | undefined,
+            timezone: args.timezone as string | undefined,
+            timeframe: args.timeframe as any,
+            bound_to_timeframe: args.bound_to_timeframe as boolean | undefined,
+            expand: args.expand as any[] | undefined,
+            cursor: args.cursor as string | undefined,
+            limit: args.limit as number | undefined,
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "analytics": {
+          if (!args.endpoint_ids || !Array.isArray(args.endpoint_ids)) {
+            throw new Error("endpoint_ids parameter is required and must be an array");
+          }
+
+          const result = await getAnalytics({
+            endpoint_ids: args.endpoint_ids as string[],
+            start: args.start as string | undefined,
+            end: args.end as string | undefined,
+            timezone: args.timezone as string | undefined,
+            timeframe: args.timeframe as any,
+            bound_to_timeframe: args.bound_to_timeframe as boolean | undefined,
+            metric: args.metric as any,
+            cursor: args.cursor as string | undefined,
+            limit: args.limit as number | undefined,
+          });
 
           return {
             content: [

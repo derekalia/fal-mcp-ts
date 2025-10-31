@@ -8,12 +8,13 @@ import { URL } from "url";
 
 /**
  * Configure the fal client with API key from environment
+ * Only call this if FAL_KEY is available
  */
 export function configureFalClient(): void {
   const apiKey = process.env.FAL_KEY;
 
   if (!apiKey) {
-    throw new Error("FAL_KEY environment variable is not set. Please configure your API key.");
+    throw new Error("FAL_KEY environment variable is not set.");
   }
 
   fal.config({
@@ -109,19 +110,24 @@ export async function falRequest<T>(
 }
 
 /**
- * Make unauthenticated HTTP request to fal.ai API
+ * Make HTTP request to fal.ai Platform API without authentication
+ * Platform API v1 endpoints work without auth (with rate limits)
+ * Note: Queue API keys don't work with Platform API v1
  */
 export async function publicRequest<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<T> {
+  // Don't include auth - Platform API v1 doesn't accept Queue API key format
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...options.headers as Record<string, string>,
+  };
+
   const response = await fetch(url, {
     method: "GET",
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
