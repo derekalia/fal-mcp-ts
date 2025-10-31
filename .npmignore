@@ -13,6 +13,10 @@ tsconfig.json
 .env
 .env.local
 
+# MCP config (may contain sensitive data)
+.mcp.json
+.claude/
+
 # Tests
 test/
 tests/
